@@ -1,0 +1,7 @@
+CREATE TABLE clicks (
+    id SERIAL PRIMARY KEY,
+    short_url VARCHAR(10) NOT NULL,
+    clicked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    user_agent TEXT,
+    FOREIGN KEY (short_url) REFERENCES urls(short_url) ON DELETE CASCADE
+);
