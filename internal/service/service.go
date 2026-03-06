@@ -11,7 +11,7 @@ import (
 type ShortenerRepositoryInterface interface {
 	CreateUrl(url *models.Url) (int, error)
 	UpdateUrl(url *models.Url) error
-	GetUrl(url string) (string, error)
+	GetUrl(shortUrl string) (string, error)
 	RegisterClick(click *models.Click) error
 	GetAllClicks(shortUrl string) ([]*models.Click, error)
 	GetClicksAggregated(shortUrl string, groupBy string) (*models.AnalyticsResponse, error)
