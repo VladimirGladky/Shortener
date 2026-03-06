@@ -14,8 +14,8 @@ import (
 
 type ShortenerServiceInterface interface {
 	CreateUrl(url *models.Url) (string, error)
-	Redirect(url string) (string, error)
-	GetAnalytics(url string, groupBy string) ([]models.Click, error)
+	Redirect(shortUrl string, userAgent string) (string, error)
+	GetAnalytics(shortUrl string, groupBy string) (*models.AnalyticsResponse, error)
 }
 
 type ShortenerServer struct {
@@ -53,7 +53,7 @@ func (s *ShortenerServer) CreateURLHandler() gin.HandlerFunc {
 			}
 		}()
 		var req *models.Url
-		if err := c.ShouldBind(&req); err != nil {
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -62,7 +62,10 @@ func (s *ShortenerServer) CreateURLHandler() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"short_url": shortUrl})
+		c.JSON(http.StatusCreated, gin.H{
+			"short_url":    shortUrl,
+			"original_url": req.OriginalUrl,
+		})
 	}
 }
 
@@ -75,7 +78,8 @@ func (s *ShortenerServer) RedirectHandler() gin.HandlerFunc {
 			}
 		}()
 		shortUrl := c.Param("short_url")
-		url, err := s.srv.Redirect(shortUrl)
+		userAgent := c.GetHeader("User-Agent")
+		url, err := s.srv.Redirect(shortUrl, userAgent)
 		if err != nil {
 			if errors.Is(err, suberrors.URLNotFound) {
 				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
