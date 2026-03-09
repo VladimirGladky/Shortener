@@ -27,7 +27,7 @@ type App struct {
 
 func NewApp(cfg *config.Config, parentCtx context.Context) *App {
 	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
+
 	db, err := postgres.NewPostgres(cfg)
 	if err != nil {
 		panic(err)
@@ -49,6 +49,7 @@ func NewApp(cfg *config.Config, parentCtx context.Context) *App {
 		ShortenerServer: server,
 		cfg:             cfg,
 		ctx:             ctx,
+		cancel:          cancel,
 	}
 }
 
@@ -66,7 +67,6 @@ func (a *App) Run() error {
 		defer a.wg.Done()
 		if err := a.ShortenerServer.Run(); err != nil {
 			errCh <- err
-			a.cancel()
 		}
 	}()
 	sigCh := make(chan os.Signal, 1)
@@ -75,6 +75,10 @@ func (a *App) Run() error {
 	case err := <-errCh:
 		logger.GetLoggerFromCtx(a.ctx).Error("error running app", zap.Error(err))
 		return err
+	case sig := <-sigCh:
+		logger.GetLoggerFromCtx(a.ctx).Info("received signal, shutting down gracefully", zap.String("signal", sig.String()))
+		a.cancel()
+		a.wg.Wait()
 	case <-a.ctx.Done():
 		logger.GetLoggerFromCtx(a.ctx).Info("context done")
 	}
