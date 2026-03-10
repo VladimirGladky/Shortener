@@ -58,7 +58,7 @@ func (s *ShortenerRepository) UpdateUrl(url *models.Url) error {
 }
 
 func (s *ShortenerRepository) RegisterClick(click *models.Click) error {
-	query := `INSERT INTO clicks (short_url,user_agent) VALUES ($1, $2, $3)`
+	query := `INSERT INTO clicks (short_url, user_agent) VALUES ($1, $2)`
 	_, err := s.db.ExecContext(s.ctx, query, click.ShortUrl, click.UserAgent)
 	if err != nil {
 		return err

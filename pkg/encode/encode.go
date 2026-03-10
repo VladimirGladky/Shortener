@@ -1,8 +1,13 @@
 package encode
 
-const base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const (
+	base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	idOffset    = 100000
+)
 
 func EncodeBase62(num int) string {
+	num += idOffset
+
 	if num == 0 {
 		return string(base62Chars[0])
 	}

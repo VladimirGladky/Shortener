@@ -36,12 +36,21 @@ func (s *ShortenerServer) Run() error {
 	eng := ginext.New("release")
 	eng.Use(ginext.Logger())
 
+	eng.Static("/static", "./web/static")
+	eng.GET("/", s.ServeUI())
+
 	v1 := eng.Group("/api/v1")
 	v1.POST("/shorten", s.CreateURLHandler())
 	v1.GET("/s/:short_url", s.RedirectHandler())
 	v1.GET("/analytics/:short_url", s.GetAnalyticsHandler())
 
 	return eng.Run(s.cfg.GetString("HOST") + ":" + s.cfg.GetString("PORT"))
+}
+
+func (s *ShortenerServer) ServeUI() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.File("./web/templates/index.html")
+	}
 }
 
 func (s *ShortenerServer) CreateURLHandler() gin.HandlerFunc {

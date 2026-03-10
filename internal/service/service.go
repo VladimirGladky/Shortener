@@ -42,6 +42,7 @@ func (s *ShortenerService) CreateUrl(url *models.Url) (string, error) {
 		return "", err
 	}
 	url.ShortUrl = encode.EncodeBase62(id)
+	url.ID = id
 	err = s.repo.UpdateUrl(url)
 	if err != nil {
 		return "", err
