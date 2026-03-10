@@ -2,10 +2,14 @@ package service
 
 import (
 	"Shortener/internal/models"
+	"Shortener/internal/suberrors"
 	"Shortener/pkg/encode"
+	"Shortener/pkg/logger"
 	"context"
 	"errors"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type ShortenerRepositoryInterface interface {
@@ -39,23 +43,36 @@ func (s *ShortenerService) CreateUrl(url *models.Url) (string, error) {
 	url.CreatedAt = time.Now()
 	id, err := s.repo.CreateUrl(url)
 	if err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Error("Failed to create URL in database",
+			zap.String("original_url", url.OriginalUrl),
+			zap.Error(err))
 		return "", err
 	}
 	url.ShortUrl = encode.EncodeBase62(id)
 	url.ID = id
 	err = s.repo.UpdateUrl(url)
 	if err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Error("Failed to update short URL",
+			zap.Int("id", id),
+			zap.String("short_url", url.ShortUrl),
+			zap.Error(err))
 		return "", err
 	}
+	logger.GetLoggerFromCtx(s.ctx).Info("Short URL created successfully",
+		zap.String("short_url", url.ShortUrl),
+		zap.String("original_url", url.OriginalUrl))
 	return url.ShortUrl, nil
 }
 
 func (s *ShortenerService) Redirect(shortUrl string, userAgent string) (string, error) {
 	if shortUrl == "" {
-		return "", errors.New("url is empty")
+		return "", suberrors.ShortURLIsEmpty
 	}
 	originalUrl, err := s.repo.GetUrl(shortUrl)
 	if err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Error("Short URL not found for redirect",
+			zap.String("short_url", shortUrl),
+			zap.Error(err))
 		return "", err
 	}
 	click := &models.Click{
@@ -63,13 +80,20 @@ func (s *ShortenerService) Redirect(shortUrl string, userAgent string) (string, 
 		UserAgent: userAgent,
 		ClickedAt: time.Now(),
 	}
-	_ = s.repo.RegisterClick(click)
+	if err = s.repo.RegisterClick(click); err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Warn("Failed to register click",
+			zap.String("short_url", shortUrl),
+			zap.Error(err))
+	}
+	logger.GetLoggerFromCtx(s.ctx).Info("Redirect performed",
+		zap.String("short_url", shortUrl),
+		zap.String("original_url", originalUrl))
 	return originalUrl, nil
 }
 
 func (s *ShortenerService) GetAnalytics(shortUrl string, groupBy string) (*models.AnalyticsResponse, error) {
 	if shortUrl == "" {
-		return nil, errors.New("url is empty")
+		return nil, suberrors.ShortURLIsEmpty
 	}
 	response := &models.AnalyticsResponse{
 		ShortURL: shortUrl,
@@ -79,7 +103,8 @@ func (s *ShortenerService) GetAnalytics(shortUrl string, groupBy string) (*model
 	case "day", "month", "user_agent":
 		response, err = s.repo.GetClicksAggregated(shortUrl, groupBy)
 	default:
-		clicks, err := s.repo.GetAllClicks(shortUrl)
+		var clicks []*models.Click
+		clicks, err = s.repo.GetAllClicks(shortUrl)
 		if err != nil {
 			return nil, err
 		}
@@ -88,6 +113,7 @@ func (s *ShortenerService) GetAnalytics(shortUrl string, groupBy string) (*model
 		return response, nil
 	}
 	if err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Error("Failed to get clicks:", zap.Error(err))
 		return nil, err
 	}
 

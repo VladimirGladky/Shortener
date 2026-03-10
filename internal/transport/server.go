@@ -113,10 +113,6 @@ func (s *ShortenerServer) GetAnalyticsHandler() gin.HandlerFunc {
 		groupBy := c.Query("group_by")
 		analytics, err := s.srv.GetAnalytics(shortUrl, groupBy)
 		if err != nil {
-			if errors.Is(err, suberrors.URLNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Short URL not found"})
-				return
-			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
