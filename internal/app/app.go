@@ -7,6 +7,7 @@ import (
 	"Shortener/internal/transport"
 	"Shortener/pkg/logger"
 	"Shortener/pkg/postgres"
+	rediscache "Shortener/pkg/redis"
 	"context"
 	"os"
 	"os/signal"
@@ -42,8 +43,16 @@ func NewApp(cfg *config.Config, parentCtx context.Context) *App {
 		logger.GetLoggerFromCtx(ctx).Info("Database migrations completed successfully")
 	}
 
+	cache, err := rediscache.NewRedisClient(ctx, cfg)
+	if err != nil {
+		logger.GetLoggerFromCtx(ctx).Warn("Failed to connect to redis, running without cache", zap.Error(err))
+		cache = nil
+	} else {
+		logger.GetLoggerFromCtx(ctx).Info("Connected to redis cache")
+	}
+
 	repo := repository.NewShortenerRepository(ctx, db)
-	srv := service.NewShortenerService(ctx, repo)
+	srv := service.NewShortenerService(ctx, repo, cache)
 	server := transport.NewShortenerServer(ctx, srv, cfg)
 	return &App{
 		ShortenerServer: server,

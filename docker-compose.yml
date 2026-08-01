@@ -21,6 +21,21 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    container_name: redis_container_dn
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "100mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - mynetwork
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   shortener_service:
     container_name: shortener_service
     build:
@@ -31,12 +46,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DBNAME: ${POSTGRES_DBNAME}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY}
       HOST: 0.0.0.0
       PORT: 4052
     networks:

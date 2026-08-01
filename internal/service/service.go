@@ -5,12 +5,16 @@ import (
 	"Shortener/internal/suberrors"
 	"Shortener/pkg/encode"
 	"Shortener/pkg/logger"
+	rediscache "Shortener/pkg/redis"
 	"context"
 	"errors"
 	"time"
 
+	"github.com/wb-go/wbf/redis"
 	"go.uber.org/zap"
 )
+
+const cacheTTL = 24 * time.Hour
 
 type ShortenerRepositoryInterface interface {
 	CreateUrl(url *models.Url) (int, error)
@@ -22,14 +26,16 @@ type ShortenerRepositoryInterface interface {
 }
 
 type ShortenerService struct {
-	ctx  context.Context
-	repo ShortenerRepositoryInterface
+	ctx   context.Context
+	repo  ShortenerRepositoryInterface
+	cache *redis.Client
 }
 
-func NewShortenerService(ctx context.Context, repo ShortenerRepositoryInterface) *ShortenerService {
+func NewShortenerService(ctx context.Context, repo ShortenerRepositoryInterface, cache *redis.Client) *ShortenerService {
 	return &ShortenerService{
-		ctx:  ctx,
-		repo: repo,
+		ctx:   ctx,
+		repo:  repo,
+		cache: cache,
 	}
 }
 
@@ -68,19 +74,26 @@ func (s *ShortenerService) Redirect(shortUrl string, userAgent string) (string, 
 	if shortUrl == "" {
 		return "", suberrors.ShortURLIsEmpty
 	}
-	originalUrl, err := s.repo.GetUrl(shortUrl)
-	if err != nil {
-		logger.GetLoggerFromCtx(s.ctx).Error("Short URL not found for redirect",
-			zap.String("short_url", shortUrl),
-			zap.Error(err))
-		return "", err
+
+	originalUrl, fromCache := s.getFromCache(shortUrl)
+	if !fromCache {
+		var err error
+		originalUrl, err = s.repo.GetUrl(shortUrl)
+		if err != nil {
+			logger.GetLoggerFromCtx(s.ctx).Error("Short URL not found for redirect",
+				zap.String("short_url", shortUrl),
+				zap.Error(err))
+			return "", err
+		}
+		s.setCache(shortUrl, originalUrl)
 	}
+
 	click := &models.Click{
 		ShortUrl:  shortUrl,
 		UserAgent: userAgent,
 		ClickedAt: time.Now(),
 	}
-	if err = s.repo.RegisterClick(click); err != nil {
+	if err := s.repo.RegisterClick(click); err != nil {
 		logger.GetLoggerFromCtx(s.ctx).Warn("Failed to register click",
 			zap.String("short_url", shortUrl),
 			zap.Error(err))
@@ -118,4 +131,31 @@ func (s *ShortenerService) GetAnalytics(shortUrl string, groupBy string) (*model
 	}
 
 	return response, nil
+}
+
+func (s *ShortenerService) getFromCache(shortUrl string) (string, bool) {
+	if s.cache == nil {
+		return "", false
+	}
+	originalUrl, err := s.cache.Get(s.ctx, rediscache.CacheKey(shortUrl))
+	if err != nil {
+		if !errors.Is(err, redis.NoMatches) {
+			logger.GetLoggerFromCtx(s.ctx).Warn("Failed to read from cache",
+				zap.String("short_url", shortUrl),
+				zap.Error(err))
+		}
+		return "", false
+	}
+	return originalUrl, true
+}
+
+func (s *ShortenerService) setCache(shortUrl string, originalUrl string) {
+	if s.cache == nil {
+		return
+	}
+	if err := s.cache.SetWithExpiration(s.ctx, rediscache.CacheKey(shortUrl), originalUrl, cacheTTL); err != nil {
+		logger.GetLoggerFromCtx(s.ctx).Warn("Failed to write to cache",
+			zap.String("short_url", shortUrl),
+			zap.Error(err))
+	}
 }
