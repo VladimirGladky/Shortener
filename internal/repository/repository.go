@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
 	"github.com/wb-go/wbf/dbpg"
 )
 
@@ -24,12 +25,28 @@ func NewShortenerRepository(ctx context.Context, db *dbpg.DB) *ShortenerReposito
 
 func (s *ShortenerRepository) CreateUrl(url *models.Url) (int, error) {
 	query := `INSERT INTO urls (original_url)
-			  VALUES ($1) 
+			  VALUES ($1)
 			  RETURNING id
     `
 	var id int
 	err := s.db.QueryRowContext(s.ctx, query, url.OriginalUrl).Scan(&id)
 	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *ShortenerRepository) CreateUrlWithAlias(url *models.Url) (int, error) {
+	query := `INSERT INTO urls (original_url, short_url)
+			  VALUES ($1, $2)
+			  RETURNING id`
+	var id int
+	err := s.db.QueryRowContext(s.ctx, query, url.OriginalUrl, url.ShortUrl).Scan(&id)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return 0, suberrors.AliasTaken
+		}
 		return 0, err
 	}
 	return id, nil

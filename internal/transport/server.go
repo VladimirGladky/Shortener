@@ -68,7 +68,14 @@ func (s *ShortenerServer) CreateURLHandler() gin.HandlerFunc {
 		}
 		shortUrl, err := s.srv.CreateUrl(req)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			switch {
+			case errors.Is(err, suberrors.AliasTaken):
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			case errors.Is(err, suberrors.AliasInvalid):
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 			return
 		}
 		c.JSON(http.StatusCreated, gin.H{

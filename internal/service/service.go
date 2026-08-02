@@ -8,6 +8,7 @@ import (
 	rediscache "Shortener/pkg/redis"
 	"context"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/wb-go/wbf/redis"
@@ -16,8 +17,11 @@ import (
 
 const cacheTTL = 24 * time.Hour
 
+var validAlias = regexp.MustCompile(`^[A-Za-z0-9_-]{1,10}$`)
+
 type ShortenerRepositoryInterface interface {
 	CreateUrl(url *models.Url) (int, error)
+	CreateUrlWithAlias(url *models.Url) (int, error)
 	UpdateUrl(url *models.Url) error
 	GetUrl(shortUrl string) (string, error)
 	RegisterClick(click *models.Click) error
@@ -47,6 +51,11 @@ func (s *ShortenerService) CreateUrl(url *models.Url) (string, error) {
 		return "", errors.New("origin url is empty")
 	}
 	url.CreatedAt = time.Now()
+
+	if url.Alias != "" {
+		return s.createWithAlias(url)
+	}
+
 	id, err := s.repo.CreateUrl(url)
 	if err != nil {
 		logger.GetLoggerFromCtx(s.ctx).Error("Failed to create URL in database",
@@ -65,6 +74,29 @@ func (s *ShortenerService) CreateUrl(url *models.Url) (string, error) {
 		return "", err
 	}
 	logger.GetLoggerFromCtx(s.ctx).Info("Short URL created successfully",
+		zap.String("short_url", url.ShortUrl),
+		zap.String("original_url", url.OriginalUrl))
+	return url.ShortUrl, nil
+}
+
+func (s *ShortenerService) createWithAlias(url *models.Url) (string, error) {
+	if !validAlias.MatchString(url.Alias) {
+		return "", suberrors.AliasInvalid
+	}
+	url.ShortUrl = url.Alias
+	id, err := s.repo.CreateUrlWithAlias(url)
+	if err != nil {
+		if errors.Is(err, suberrors.AliasTaken) {
+			return "", err
+		}
+		logger.GetLoggerFromCtx(s.ctx).Error("Failed to create URL with alias",
+			zap.String("alias", url.Alias),
+			zap.String("original_url", url.OriginalUrl),
+			zap.Error(err))
+		return "", err
+	}
+	url.ID = id
+	logger.GetLoggerFromCtx(s.ctx).Info("Short URL created with custom alias",
 		zap.String("short_url", url.ShortUrl),
 		zap.String("original_url", url.OriginalUrl))
 	return url.ShortUrl, nil

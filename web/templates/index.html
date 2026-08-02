@@ -186,6 +186,10 @@
                 <label for="originalUrl">Original URL:</label>
                 <input type="text" id="originalUrl" placeholder="https://example.com/very/long/url">
             </div>
+            <div class="form-group">
+                <label for="customAlias">Custom alias (optional):</label>
+                <input type="text" id="customAlias" placeholder="my-link (letters, digits, - or _, up to 10 chars)">
+            </div>
             <button onclick="createShortUrl()">Shorten URL</button>
             <div id="createResult" class="result"></div>
         </div>
@@ -212,11 +216,17 @@
 
         async function createShortUrl() {
             const originalUrl = document.getElementById('originalUrl').value;
+            const alias = document.getElementById('customAlias').value.trim();
             const resultDiv = document.getElementById('createResult');
 
             if (!originalUrl) {
                 showResult(resultDiv, 'Please enter a URL', 'error');
                 return;
+            }
+
+            const payload = { original_url: originalUrl };
+            if (alias) {
+                payload.alias = alias;
             }
 
             try {
@@ -225,7 +235,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ original_url: originalUrl })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
